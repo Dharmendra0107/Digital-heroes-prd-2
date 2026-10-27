@@ -1,14 +1,17 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 function LoginForm() {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
-  const next = searchParams.get('next') || '/dashboard'
+  const next =
+    searchParams.get('next') ||
+    (pathname === '/admin/login' ? '/admin/dashboard' : '/dashboard')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

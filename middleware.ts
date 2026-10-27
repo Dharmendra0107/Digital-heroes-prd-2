@@ -10,7 +10,7 @@ import {
 // Routes that require authentication
 const CUSTOMER_ROUTES = ['/dashboard', '/orders', '/designer', '/proofs']
 const ADMIN_ROUTES = ['/admin']
-const AUTH_ROUTES = ['/login', '/signup']
+const AUTH_ROUTES = ['/login', '/signup', '/admin/login']
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -27,7 +27,9 @@ export async function middleware(request: NextRequest) {
     const demoSession = token ? await verifyDemoSession(token, secret) : null
     const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route))
     const isCustomerRoute = CUSTOMER_ROUTES.some((route) => pathname.startsWith(route))
-    const isAdminRoute = ADMIN_ROUTES.some((route) => pathname.startsWith(route))
+    const isAdminRoute =
+      pathname !== '/admin/login' &&
+      ADMIN_ROUTES.some((route) => pathname.startsWith(route))
 
     if (demoSession && isAuthRoute) {
       const destination = demoSession.role === 'admin' ? '/admin/dashboard' : '/dashboard'
@@ -75,7 +77,16 @@ export async function middleware(request: NextRequest) {
 
   // Redirect logged-in users away from auth pages
   if (user && AUTH_ROUTES.some(r => pathname.startsWith(r))) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    let destination = '/dashboard'
+    if (pathname === '/admin/login') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      if (profile?.role === 'admin') destination = '/admin/dashboard'
+    }
+    return NextResponse.redirect(new URL(destination, request.url))
   }
 
   // Protect customer routes
@@ -84,7 +95,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // Protect admin routes — check role from profile
-  if (ADMIN_ROUTES.some(r => pathname.startsWith(r))) {
+  if (
+    pathname !== '/admin/login' &&
+    ADMIN_ROUTES.some(r => pathname.startsWith(r))
+  ) {
     if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
