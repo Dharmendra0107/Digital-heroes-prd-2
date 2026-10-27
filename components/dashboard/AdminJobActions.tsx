@@ -18,6 +18,7 @@ const STAGES: OrderStatus[] = [
   'proof_approved',
   'in_production',
   'completed',
+  'cancelled',
 ]
 
 export default function AdminJobActions({

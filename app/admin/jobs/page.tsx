@@ -21,6 +21,7 @@ const STAGES = [
   { key: 'proof_approved', label: 'Proof Approved' },
   { key: 'in_production', label: 'In Production' },
   { key: 'completed', label: 'Completed' },
+  { key: 'cancelled', label: 'Cancelled' },
 ]
 
 export default async function AdminJobsPage({ searchParams }: Props) {
