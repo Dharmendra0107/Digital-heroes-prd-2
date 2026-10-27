@@ -58,7 +58,6 @@ export default async function AdminUsersPage() {
                 <tr className="bg-neutral-900/60 border-b border-neutral-700 text-neutral-400 uppercase text-[10px] tracking-wider font-semibold">
                   <th className="py-3 px-6">User / Full Name</th>
                   <th className="py-3 px-6">Email Address</th>
-                  <th className="py-3 px-6">Company / Club</th>
                   <th className="py-3 px-6">Platform Role</th>
                   <th className="py-3 px-6">Joined On</th>
                   {!isDemoAuthEnabled() && <th className="py-3 px-6">Edit</th>}
@@ -69,7 +68,6 @@ export default async function AdminUsersPage() {
                   <tr key={user.id} className="hover:bg-neutral-800/50 transition-colors">
                     <td className="py-4 px-6 font-semibold text-white">{user.full_name || 'N/A'}</td>
                     <td className="py-4 px-6 font-mono text-neutral-300">{user.email}</td>
-                    <td className="py-4 px-6 text-neutral-400">{user.company || '—'}</td>
                     <td className="py-4 px-6">
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
