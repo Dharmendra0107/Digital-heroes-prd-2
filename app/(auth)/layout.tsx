@@ -10,9 +10,6 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             <span className="text-amber-500">▲</span>
             <span>Digital Heroes</span>
           </Link>
-          <p className="text-xs uppercase font-mono tracking-widest text-neutral-400 mt-1">
-            Web-to-Print Portal
-          </p>
         </div>
         {children}
       </div>
