@@ -46,10 +46,14 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
+      const emailRedirectTo = new URL('/auth/callback', window.location.origin)
+      emailRedirectTo.searchParams.set('next', '/dashboard')
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: emailRedirectTo.toString(),
           data: {
             full_name: fullName,
             company: company || undefined,

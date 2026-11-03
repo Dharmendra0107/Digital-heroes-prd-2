@@ -38,7 +38,7 @@ The Vercel project is connected to `dharmendradev-0107/dh-prd-2`. The local Git 
 ## How the application works
 
 1. A customer browses the storefront and configures a product. Product definitions, pricing tiers, and configuration are stored in Supabase.
-2. The customer signs in through Supabase Auth and places an order. The order and its selected product configuration are saved in the database with an initial status such as `pending_payment`.
+2. The customer signs in through Supabase Auth and places an order. New signup confirmation emails redirect to `/auth/callback` on the same origin where signup began; the callback exchanges Supabase's one-time code for a session before opening the customer dashboard. The order and its selected product configuration are saved in the database with an initial status such as `pending_payment`.
 3. If Stripe is configured, the customer can start a Stripe Checkout session. A verified `checkout.session.completed` webhook updates the order to `artwork_pending`. Do not treat a successful order submission as proof that a payment was collected.
 4. The customer creates or uploads artwork for the order. The admin reviews the order and updates its production status from the admin order detail page.
 5. Proof records can be sent to the customer. The customer can approve a pending proof or request revisions. Approval marks the proof approved and moves the order to `proof_approved`.
@@ -56,6 +56,8 @@ Never put passwords, API keys, service-role keys, SMTP app passwords, webhook se
 ### Production
 
 Manage production secrets in the Vercel project's [Environment Variables](https://vercel.com/dharmendra17/dh-prd-2/settings/environment-variables) page. Apply changes to the Production environment and redeploy when required.
+
+In Supabase Authentication URL Configuration, set the production Site URL to `https://dh-prd-2.vercel.app` and add `https://dh-prd-2.vercel.app/auth/callback` to the allowed redirect URLs. This prevents Supabase's default confirmation redirect from sending customers to a developer's `localhost`. The signup flow explicitly supplies its current app origin, but the Supabase Site URL remains the fallback for other Auth emails and links.
 
 ### Local development
 

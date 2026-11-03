@@ -12,6 +12,7 @@ function LoginForm() {
   const next =
     searchParams.get('next') ||
     (pathname === '/admin/login' ? '/admin/dashboard' : '/dashboard')
+  const authError = searchParams.get('authError')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -90,9 +91,10 @@ function LoginForm() {
         Sign in to view orders, review proofs, or reorder past jobs.
       </p>
 
-      {errorMsg && (
+      {(errorMsg || authError === 'confirmation_failed') && (
         <div className="p-3 mb-5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs">
-          {errorMsg}
+          {errorMsg ||
+            'This email confirmation link is invalid or expired. Request a new confirmation email, or sign in if your account is already confirmed.'}
         </div>
       )}
 
