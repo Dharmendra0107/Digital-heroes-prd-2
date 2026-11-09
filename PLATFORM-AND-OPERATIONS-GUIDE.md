@@ -59,6 +59,8 @@ Manage production secrets in the Vercel project's [Environment Variables](https:
 
 In Supabase Authentication URL Configuration, set the production Site URL to `https://dh-prd-2.vercel.app` and add `https://dh-prd-2.vercel.app/auth/callback` to the allowed redirect URLs. This prevents Supabase's default confirmation redirect from sending customers to a developer's `localhost`. The signup flow explicitly supplies its current app origin, but the Supabase Site URL remains the fallback for other Auth emails and links.
 
+Supabase Auth confirmation email delivery is separate from application notification email settings such as `SMTP_*` and `RESEND_API_KEY`. Configure a verified sender under Supabase Authentication → Emails → SMTP Settings before relying on production signup. The built-in Supabase mailer is not a substitute for a production email provider. The signup page provides a resend action and does not claim that a new account was created when Supabase returns an obfuscated duplicate-account response.
+
 ### Local development
 
 Copy `.env.example` to `.env.local` and put local development values there. `.env.local` is private and must not be committed. Use test-mode payment credentials for local testing.
@@ -84,7 +86,7 @@ Never paste secret values into this guide. Obtain or rotate them through the res
 ## Current operational notes
 
 - The deployment and admin pages have been exercised in production, including order status updates and the cancelled status filter.
-- Email delivery is not confirmed as operational. Resend requires a verified sender domain/address. Previous Gmail SMTP authentication failed; revoke any old shared App Password and use a newly generated credential only if SMTP is selected.
+- Supabase Auth custom SMTP is currently disabled; confirmation-email delivery to customer inboxes is not confirmed. Configure and test a verified sender in Supabase Authentication → Emails → SMTP Settings. This is separate from the application's notification mailer. Resend requires a verified sender domain/address. Previous Gmail SMTP authentication for application notifications failed; revoke any old shared App Password and use a newly generated credential only if that provider is selected.
 - Payment configuration and a successful live payment have not been confirmed by this guide. Test payment and webhook behavior in Stripe test mode before enabling real transactions.
 - Print generation requires a valid order with artwork and an approved latest proof; a pending-payment QA order is not suitable for validating final output.
 - Admin credentials are individual Supabase Auth accounts. Use `/admin/login`; assign the `admin` role through an authorized administrative process. Do not store an admin password in repository documentation. A temporary password does not expire automatically after one day; rotate any temporary password manually after testing.

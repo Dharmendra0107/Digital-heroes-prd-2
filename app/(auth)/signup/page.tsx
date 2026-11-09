@@ -16,7 +16,9 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
+  const [resendMsg, setResendMsg] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
   const [demoAuthEnabled, setDemoAuthEnabled] = useState(false)
 
   useEffect(() => {
@@ -32,6 +34,7 @@ export default function SignupPage() {
     e.preventDefault()
     setErrorMsg('')
     setSuccessMsg('')
+    setResendMsg('')
 
     if (password !== confirmPassword) {
       setErrorMsg('Passwords do not match.')
@@ -70,10 +73,13 @@ export default function SignupPage() {
         // Immediate session granted
         router.push('/dashboard')
         router.refresh()
-      } else {
-        // Supabase email confirmation setting is active
+      } else if (!data.user?.id || data.user.identities?.length === 0) {
         setSuccessMsg(
-          'Account registered! Please check your email inbox to confirm your account, then sign in.'
+          'We could not confirm a new account. If this email is already registered, sign in; if it is awaiting confirmation, request another email below.'
+        )
+      } else {
+        setSuccessMsg(
+          'Signup request received. Check your inbox and spam folder for a confirmation email. If it does not arrive, request another below.'
         )
       }
     } catch (err: unknown) {
@@ -84,6 +90,38 @@ export default function SignupPage() {
       )
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResendConfirmation = async () => {
+    setErrorMsg('')
+    setResendMsg('')
+    setResending(true)
+
+    try {
+      const emailRedirectTo = new URL('/auth/callback', window.location.origin)
+      emailRedirectTo.searchParams.set('next', '/dashboard')
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: emailRedirectTo.toString() },
+      })
+
+      if (error) {
+        throw error
+      }
+
+      setResendMsg(
+        'If this address has an unconfirmed account, Supabase accepted the resend request. Check your inbox and spam folder.'
+      )
+    } catch (err: unknown) {
+      setErrorMsg(
+        err instanceof Error
+          ? `Could not request a confirmation email: ${err.message}`
+          : 'Could not request a confirmation email. Please try again.'
+      )
+    } finally {
+      setResending(false)
     }
   }
 
@@ -103,7 +141,16 @@ export default function SignupPage() {
       {successMsg && (
         <div className="p-4 mb-5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs leading-relaxed">
           {successMsg}
+          {resendMsg && <p className="mt-2">{resendMsg}</p>}
           <div className="mt-2 font-medium">
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={resending}
+              className="mr-3 underline text-emerald-900 disabled:opacity-50"
+            >
+              {resending ? 'Requesting…' : 'Resend confirmation email'}
+            </button>
             <Link href="/login" className="underline text-emerald-900">
               Go to Login &rarr;
             </Link>
