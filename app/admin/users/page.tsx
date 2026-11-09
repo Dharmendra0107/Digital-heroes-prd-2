@@ -3,6 +3,7 @@ import { DEMO_ACCOUNTS } from '@/lib/demo-auth-credentials'
 import { isDemoAuthEnabled } from '@/lib/demo-auth'
 import type { Profile } from '@/types'
 import AdminUserEditor from './AdminUserEditor'
+import AdminUserDelete from './AdminUserDelete'
 
 export default async function AdminUsersPage() {
   let profiles: Profile[] = isDemoAuthEnabled()
@@ -60,7 +61,7 @@ export default async function AdminUsersPage() {
                   <th className="py-3 px-6">Email Address</th>
                   <th className="py-3 px-6">Platform Role</th>
                   <th className="py-3 px-6">Joined On</th>
-                  {!isDemoAuthEnabled() && <th className="py-3 px-6">Edit</th>}
+                  {!isDemoAuthEnabled() && <th className="py-3 px-6">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800">
@@ -90,6 +91,7 @@ export default async function AdminUsersPage() {
                           company={user.company || ''}
                           role={user.role}
                         />
+                        <AdminUserDelete id={user.id} email={user.email} />
                       </td>
                     )}
                   </tr>

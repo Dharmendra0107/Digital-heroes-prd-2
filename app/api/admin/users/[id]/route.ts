@@ -92,3 +92,86 @@ export async function PATCH(
   }
   return Response.json({ user: data })
 }
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getAppSession()
+  if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  if (session.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 })
+  if (isDemoAuthEnabled()) {
+    return Response.json(
+      { error: 'Configure Supabase to delete users; demo accounts are read-only.' },
+      { status: 501 }
+    )
+  }
+
+  const { id } = await params
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return Response.json({ error: 'Invalid user ID' }, { status: 400 })
+  }
+  if (id === session.userId) {
+    return Response.json({ error: 'You cannot delete your own account' }, { status: 409 })
+  }
+
+  const adminClient = createSupabaseAdminClient()
+  const { data: target, error: targetError } = await adminClient
+    .from('profiles')
+    .select('id, role')
+    .eq('id', id)
+    .maybeSingle()
+  if (targetError) {
+    console.error('[admin users DELETE] target lookup failed:', targetError)
+    return Response.json({ error: 'Could not load the user profile' }, { status: 500 })
+  }
+  if (!target) return Response.json({ error: 'User not found' }, { status: 404 })
+
+  if (target.role === 'admin') {
+    const { count, error: countError } = await adminClient
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'admin')
+    if (countError) {
+      console.error('[admin users DELETE] administrator count failed:', countError)
+      return Response.json({ error: 'Could not verify administrator count' }, { status: 500 })
+    }
+    if ((count ?? 0) <= 1) {
+      return Response.json({ error: 'The last administrator cannot be deleted' }, { status: 409 })
+    }
+  }
+
+  const references = await Promise.all([
+    adminClient
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', id),
+    adminClient
+      .from('designs')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', id),
+    adminClient
+      .from('proofs')
+      .select('id', { count: 'exact', head: true })
+      .eq('approved_by', id),
+  ])
+  const referenceError = references.find(({ error }) => error)?.error
+  if (referenceError) {
+    console.error('[admin users DELETE] related-data lookup failed:', referenceError)
+    return Response.json({ error: 'Could not verify whether the user has related activity' }, { status: 500 })
+  }
+  if (references.some(({ count }) => (count ?? 0) > 0)) {
+    return Response.json(
+      { error: 'This user has orders, designs, or proof approvals and cannot be deleted.' },
+      { status: 409 }
+    )
+  }
+
+  const { error: deleteError } = await adminClient.auth.admin.deleteUser(id)
+  if (deleteError) {
+    console.error('[admin users DELETE] account deletion failed:', deleteError)
+    return Response.json({ error: 'Could not delete the user account' }, { status: 500 })
+  }
+
+  return Response.json({ success: true })
+}
