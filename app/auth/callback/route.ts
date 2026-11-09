@@ -20,6 +20,8 @@ function getSafeNextPath(value: string | null, origin: string) {
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
   const code = searchParams.get('code')
+  const tokenHash = searchParams.get('token_hash')
+  const tokenType = searchParams.get('type')
   const cookieStore = await cookies()
   const destination = getSafeNextPath(searchParams.get('next'), origin)
 
@@ -43,14 +45,33 @@ export async function GET(request: NextRequest) {
     },
   })
 
-  if (!code || searchParams.has('error')) {
+  if (searchParams.has('error')) {
     console.warn('[auth callback] Supabase returned an invalid or expired confirmation link')
     return NextResponse.redirect(new URL('/login?authError=confirmation_failed', origin))
   }
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code)
-  if (error) {
-    console.error('[auth callback] Failed to exchange confirmation code:', error.message)
+  let errorMessage: string | null = null
+  if (tokenHash) {
+    if (tokenType !== 'email') {
+      console.warn('[auth callback] Supabase returned an unsupported email token type')
+      return NextResponse.redirect(new URL('/login?authError=confirmation_failed', origin))
+    }
+
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'email',
+    })
+    errorMessage = error?.message ?? null
+  } else if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    errorMessage = error?.message ?? null
+  } else {
+    console.warn('[auth callback] Confirmation link did not contain a token')
+    return NextResponse.redirect(new URL('/login?authError=confirmation_failed', origin))
+  }
+
+  if (errorMessage) {
+    console.error('[auth callback] Failed to verify confirmation token:', errorMessage)
     return NextResponse.redirect(new URL('/login?authError=confirmation_failed', origin))
   }
 

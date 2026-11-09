@@ -94,7 +94,7 @@ function LoginForm() {
       {(errorMsg || authError === 'confirmation_failed') && (
         <div className="p-3 mb-5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs">
           {errorMsg ||
-            'This email confirmation link is invalid or expired. Request a new confirmation email, or sign in if your account is already confirmed.'}
+            'We could not finish sign-in automatically. If you just confirmed your email, sign in with your email and password. If your account is not confirmed, request a new confirmation email.'}
         </div>
       )}
 

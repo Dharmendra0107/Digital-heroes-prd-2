@@ -55,6 +55,8 @@ Never put passwords, API keys, service-role keys, SMTP app passwords, webhook se
 
 ### Production
 
+For cross-device confirmation, configure Supabase Authentication → Email Templates → Confirm signup to link to `{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}&amp;type=email`. The callback verifies this one-time token and creates a session without requiring the signup browser's PKCE verifier. The callback also continues to support existing code-based confirmation links.
+
 Manage production secrets in the Vercel project's [Environment Variables](https://vercel.com/dharmendra17/dh-prd-2/settings/environment-variables) page. Apply changes to the Production environment and redeploy when required.
 
 In Supabase Authentication URL Configuration, set the production Site URL to `https://dh-prd-2.vercel.app` and add `https://dh-prd-2.vercel.app/auth/callback` to the allowed redirect URLs. This prevents Supabase's default confirmation redirect from sending customers to a developer's `localhost`. The signup flow explicitly supplies its current app origin, but the Supabase Site URL remains the fallback for other Auth emails and links.
