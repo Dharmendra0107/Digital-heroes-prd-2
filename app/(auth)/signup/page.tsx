@@ -5,6 +5,24 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
+function getAuthErrorMessage(error: unknown, action: 'signup' | 'resend') {
+  const message =
+    error instanceof Error ? error.message : 'Please verify your details and try again.'
+  const normalizedMessage = message.toLowerCase()
+
+  if (
+    normalizedMessage.includes('rate limit') ||
+    normalizedMessage.includes('too many requests') ||
+    normalizedMessage.includes('over_email_send_rate_limit')
+  ) {
+    return 'Too many confirmation emails were requested recently. Wait a few minutes before trying again. If you already signed up, check your inbox and spam folder, or try signing in.'
+  }
+
+  return action === 'resend'
+    ? `Could not request a confirmation email: ${message}`
+    : message
+}
+
 export default function SignupPage() {
   const router = useRouter()
   const supabase = createSupabaseBrowserClient()
@@ -83,11 +101,7 @@ export default function SignupPage() {
         )
       }
     } catch (err: unknown) {
-      setErrorMsg(
-        err instanceof Error
-          ? err.message
-          : 'Failed to create account. Please verify details and try again.'
-      )
+      setErrorMsg(getAuthErrorMessage(err, 'signup'))
     } finally {
       setLoading(false)
     }
@@ -115,11 +129,7 @@ export default function SignupPage() {
         'If this address has an unconfirmed account, Supabase accepted the resend request. Check your inbox and spam folder.'
       )
     } catch (err: unknown) {
-      setErrorMsg(
-        err instanceof Error
-          ? `Could not request a confirmation email: ${err.message}`
-          : 'Could not request a confirmation email. Please try again.'
-      )
+      setErrorMsg(getAuthErrorMessage(err, 'resend'))
     } finally {
       setResending(false)
     }
