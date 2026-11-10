@@ -25,7 +25,7 @@ interface DesignerToolbarProps {
   color: string
   isBold: boolean
   isItalic: boolean
-  fileInputRef: React.RefObject<HTMLInputElement | null>
+  isImageUploading: boolean
 }
 
 const FONT_SIZES = [12, 14, 16, 18, 24, 36, 48]
@@ -60,7 +60,7 @@ const DesignerToolbar: FC<DesignerToolbarProps> = ({
   color,
   isBold,
   isItalic,
-  fileInputRef,
+  isImageUploading,
 }) => {
   return (
     <div className="flex flex-wrap items-center gap-2 p-3 bg-white border-b border-neutral-200">
@@ -77,17 +77,11 @@ const DesignerToolbar: FC<DesignerToolbarProps> = ({
       <button
         type="button"
         onClick={onUploadImage}
-        className="px-3 py-1.5 text-sm font-medium bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors"
+        disabled={isImageUploading}
+        className="px-3 py-1.5 text-sm font-medium bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-60 transition-colors"
       >
-        Upload Logo
+        {isImageUploading ? 'Adding image…' : 'Upload Logo'}
       </button>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={() => {}}
-      />
 
       <div className="w-px h-6 bg-neutral-200 mx-1" />
 

@@ -39,6 +39,9 @@ export default function DesignerCanvas({
   const [color, setColor] = useState<string>('#000000')
   const [isBold, setIsBold] = useState<boolean>(false)
   const [isItalic, setIsItalic] = useState<boolean>(false)
+  const [isImageUploading, setIsImageUploading] = useState(false)
+  const [imageUploadMessage, setImageUploadMessage] = useState('')
+  const [imageUploadFailed, setImageUploadFailed] = useState(false)
 
   // Scale factor: fit within ~600px wide area
   const canvasWidth = 600
@@ -200,15 +203,25 @@ export default function DesignerCanvas({
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !fabricCanvasRef.current) return
+    if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = async (f) => {
-      const dataUrl = f.target?.result as string
+    setIsImageUploading(true)
+    setImageUploadFailed(false)
+    setImageUploadMessage(`Adding ${file.name} to the canvas…`)
+
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          if (typeof reader.result === 'string') resolve(reader.result)
+          else reject(new Error('The selected image could not be read'))
+        }
+        reader.onerror = () => reject(reader.error ?? new Error('The selected image could not be read'))
+        reader.readAsDataURL(file)
+      })
       const { FabricImage } = await import('fabric')
-
       const img = await FabricImage.fromURL(dataUrl)
-      // Scale down image to fit within print bounds
+
       const maxW = bounds.width * 0.6
       const maxH = bounds.height * 0.6
       const scaleX = maxW / (img.width || 1)
@@ -222,14 +235,20 @@ export default function DesignerCanvas({
       })
 
       const canvas = fabricCanvasRef.current
-      if (!canvas) return
+      if (!canvas) throw new Error('The design canvas is not ready')
 
       canvas.add(img)
       canvas.setActiveObject(img)
       canvas.renderAll()
+      setImageUploadMessage(`${file.name} added to the canvas. Drag it to position or resize it.`)
+    } catch (err) {
+      console.error('[DesignerCanvas] image upload failed:', err)
+      setImageUploadFailed(true)
+      setImageUploadMessage('Could not add that image. Please try a PNG, JPEG, WebP, or SVG file.')
+    } finally {
+      setIsImageUploading(false)
+      e.target.value = ''
     }
-    reader.readAsDataURL(file)
-    e.target.value = ''
   }
 
   const handleDeleteSelected = () => {
@@ -403,11 +422,20 @@ export default function DesignerCanvas({
         color={color}
         isBold={isBold}
         isItalic={isItalic}
-        fileInputRef={fileInputRef}
+        isImageUploading={isImageUploading}
       />
 
       {/* Interactive Canvas Area */}
       <div className="p-6 bg-neutral-100 flex flex-col items-center justify-center min-h-[460px] overflow-auto">
+        <p
+          role="status"
+          aria-live="polite"
+          className={`w-full max-w-[600px] min-h-5 mb-3 text-xs ${
+            imageUploadFailed ? 'text-red-600' : 'text-neutral-500'
+          }`}
+        >
+          {imageUploadMessage || 'Upload Logo places the image on the canvas. Drag to position it and use the corner handles to resize.'}
+        </p>
         <div className="shadow-lg border border-neutral-300 rounded overflow-hidden bg-white relative">
           <canvas ref={canvasRef} />
         </div>

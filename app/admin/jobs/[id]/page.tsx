@@ -5,7 +5,7 @@ import { isDemoAuthEnabled } from '@/lib/demo-auth'
 import { readDemoStore } from '@/lib/demo-store'
 import Badge from '@/components/ui/Badge'
 import AdminJobActions from '@/components/dashboard/AdminJobActions'
-import type { Order, Proof, PrintFile, Design, Product, Profile } from '@/types'
+import type { Order, Proof, Product, Profile } from '@/types'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -21,51 +21,25 @@ export default async function AdminJobDetailPage({ params }: Props) {
 
   let order: OrderDetail | null = null
   let proofs: Proof[] = []
-  let design: Design | null = null
-  let printFile: PrintFile | null = null
 
   if (!isDemoAuthEnabled()) {
     const adminClient = createSupabaseAdminClient()
     try {
-      const { data: orderData } = await adminClient
-        .from('orders')
-        .select('*, customer:profiles(*), product:products(*)')
-        .eq('id', id)
-        .single()
+      const [{ data: orderData }, { data: proofData }] = await Promise.all([
+        adminClient
+          .from('orders')
+          .select('*, customer:profiles(full_name,email,company), product:products(name,division)')
+          .eq('id', id)
+          .single(),
+        adminClient
+          .from('proofs')
+          .select('*')
+          .eq('order_id', id)
+          .order('version', { ascending: false }),
+      ])
 
-      if (orderData) {
-        order = orderData as OrderDetail
-      }
-
-      const { data: proofData } = await adminClient
-        .from('proofs')
-        .select('*')
-        .eq('order_id', id)
-        .order('version', { ascending: false })
-
-      if (proofData) {
-        proofs = proofData as Proof[]
-      }
-
-      const { data: designData } = await adminClient
-        .from('designs')
-        .select('*')
-        .eq('order_id', id)
-        .single()
-
-      if (designData) {
-        design = designData as Design
-      }
-
-      const { data: fileData } = await adminClient
-        .from('print_files')
-        .select('*')
-        .eq('order_id', id)
-        .single()
-
-      if (fileData) {
-        printFile = fileData as PrintFile
-      }
+      if (orderData) order = orderData as OrderDetail
+      if (proofData) proofs = proofData as Proof[]
     } catch (err) {
       console.warn('[AdminJobDetailPage] error:', err)
     }
@@ -76,8 +50,6 @@ export default async function AdminJobDetailPage({ params }: Props) {
       proofs = store.proofs
         .filter((proof) => proof.order_id === id)
         .sort((a, b) => b.version - a.version)
-      design = store.designs.find((item) => item.order_id === id) ?? null
-      printFile = store.printFiles.find((file) => file.order_id === id) ?? null
     } catch (err) {
       console.error('[AdminJobDetailPage] local demo data read failed:', err)
     }

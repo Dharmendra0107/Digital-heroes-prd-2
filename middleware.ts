@@ -48,6 +48,15 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  // AdminLayout verifies the session and role before rendering admin content.
+  if (
+    pathname !== '/admin/login' &&
+    !pathname.startsWith('/admin/login/') &&
+    ADMIN_ROUTES.some((route) => pathname.startsWith(route))
+  ) {
+    return response
+  }
+
   // Create Supabase client using cookies
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
