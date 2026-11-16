@@ -2,6 +2,21 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
+const EMAIL_OTP_TYPES = [
+  'signup',
+  'invite',
+  'magiclink',
+  'recovery',
+  'email_change',
+  'email',
+] as const
+
+type EmailOtpType = (typeof EMAIL_OTP_TYPES)[number]
+
+function isEmailOtpType(value: string | null): value is EmailOtpType {
+  return value !== null && EMAIL_OTP_TYPES.some((type) => type === value)
+}
+
 function getSafeNextPath(value: string | null, origin: string) {
   if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
     return '/dashboard'
@@ -52,14 +67,14 @@ export async function GET(request: NextRequest) {
 
   let errorMessage: string | null = null
   if (tokenHash) {
-    if (tokenType !== 'email') {
+    if (!isEmailOtpType(tokenType)) {
       console.warn('[auth callback] Supabase returned an unsupported email token type')
       return NextResponse.redirect(new URL('/login?authError=confirmation_failed', origin))
     }
 
     const { error } = await supabase.auth.verifyOtp({
       token_hash: tokenHash,
-      type: 'email',
+      type: tokenType,
     })
     errorMessage = error?.message ?? null
   } else if (code) {

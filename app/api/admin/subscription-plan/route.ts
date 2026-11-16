@@ -1,7 +1,12 @@
 import { type NextRequest } from 'next/server'
 import { getAppSession } from '@/lib/app-session'
 import { isDemoAuthEnabled } from '@/lib/demo-auth'
-import { isRazorpayConfigured, razorpayRequest, type RazorpayPlan } from '@/lib/razorpay'
+import {
+  isRazorpayConfigured,
+  razorpayRequest,
+  RazorpayApiError,
+  type RazorpayPlan,
+} from '@/lib/razorpay'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import type { SubscriptionBillingPeriod, SubscriptionPlanSettings } from '@/types'
 
@@ -69,6 +74,15 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error) {
     console.error('[admin subscription plan] Razorpay plan creation failed:', error)
+    if (error instanceof RazorpayApiError && error.status === 401) {
+      return Response.json(
+        {
+          error:
+            'Razorpay rejected the API credentials. Use a matching Key ID and Secret from the same Razorpay mode, then update the server environment and redeploy.',
+        },
+        { status: 502 }
+      )
+    }
     return Response.json({ error: 'Could not create the Razorpay subscription plan.' }, { status: 502 })
   }
 

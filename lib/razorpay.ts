@@ -51,6 +51,13 @@ export interface RazorpaySubscription {
   notes?: Record<string, string>
 }
 
+export class RazorpayApiError extends Error {
+  constructor(readonly status: number) {
+    super(`Razorpay API request failed with status ${status}`)
+    this.name = 'RazorpayApiError'
+  }
+}
+
 export function isRazorpayConfigured() {
   return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
 }
@@ -80,7 +87,7 @@ export async function razorpayRequest<T>(
   const responseText = await response.text()
 
   if (!response.ok) {
-    throw new Error(`Razorpay API request failed with status ${response.status}`)
+    throw new RazorpayApiError(response.status)
   }
 
   try {

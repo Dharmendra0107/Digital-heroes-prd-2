@@ -56,11 +56,11 @@ Never put passwords, API keys, service-role keys, SMTP app passwords, webhook se
 
 ### Production
 
-For cross-device confirmation, configure Supabase Authentication → Email Templates → Confirm signup to link to `{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}&amp;type=email`. The callback verifies this one-time token and creates a session without requiring the signup browser's PKCE verifier. The callback also continues to support existing code-based confirmation links.
+For cross-device confirmation, configure Supabase Authentication → Email Templates → Confirm signup to link to `{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}&amp;type=signup`. The token type must match the email action; using `type=email` for signup links makes Supabase reject the one-time token. The callback verifies the token and creates a session without requiring the signup browser's PKCE verifier. It also supports code-based confirmation links and other email OTP types.
 
 Manage production secrets in the Vercel project's [Environment Variables](https://vercel.com/dharmendra17/dh-prd-2/settings/environment-variables) page. Apply changes to the Production environment and redeploy when required.
 
-In Supabase Authentication URL Configuration, set the production Site URL to `https://dh-prd-2.vercel.app` and add `https://dh-prd-2.vercel.app/auth/callback` to the allowed redirect URLs. This prevents Supabase's default confirmation redirect from sending customers to a developer's `localhost`. The signup flow explicitly supplies its current app origin, but the Supabase Site URL remains the fallback for other Auth emails and links.
+In Supabase Authentication URL Configuration, set the production Site URL to `https://dh-prd-2.vercel.app` and add `https://dh-prd-2.vercel.app/auth/callback` to the allowed redirect URLs. For local testing, also allow `http://localhost:3000/auth/callback` and `http://127.0.0.1:3000/auth/callback`. This prevents Supabase's default confirmation redirect from sending customers to the wrong host. The signup flow explicitly supplies its current app origin, but the Supabase Site URL remains the fallback for other Auth emails and links.
 
 Supabase Auth confirmation email delivery is separate from application notification email settings such as `SMTP_*` and `RESEND_API_KEY`. Configure a verified sender under Supabase Authentication → Emails → SMTP Settings before relying on production signup. The built-in Supabase mailer is not a substitute for a production email provider. The signup page provides a resend action and does not claim that a new account was created when Supabase returns an obfuscated duplicate-account response.
 
@@ -75,8 +75,8 @@ The application recognizes these environment variable names:
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Supabase client key; database access must still be protected by policies. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Privileged server-side Supabase operations. Keep secret; never expose to browser code. |
-| `RAZORPAY_KEY_ID` | Razorpay key ID used to create orders and initialize Checkout. |
-| `RAZORPAY_KEY_SECRET` | Server-only Razorpay API and checkout-signature secret. Never expose it to browser code. |
+| `RAZORPAY_KEY_ID` | Razorpay key ID used to create orders and initialize Checkout. Pair it only with its matching secret from the same Razorpay mode. |
+| `RAZORPAY_KEY_SECRET` | Server-only Razorpay API and checkout-signature secret. Never expose it to browser code. A 401 from Razorpay usually means the pair is invalid, mismatched, or from different modes. |
 | `RAZORPAY_WEBHOOK_SECRET` | Verifies Razorpay webhook signatures; set the same value in the Razorpay Dashboard webhook configuration. |
 | `RESEND_API_KEY` | Resend API access for email delivery. |
 | `EMAIL_FROM` | Sender address authorized by the configured email provider. |
@@ -89,7 +89,7 @@ Never paste secret values into this guide. Obtain or rotate them through the res
 ## Current operational notes
 
 - The deployment and admin pages have been exercised in production, including order status updates and the cancelled status filter.
-- Supabase Auth custom SMTP is currently disabled; confirmation-email delivery to customer inboxes is not confirmed. Configure and test a verified sender in Supabase Authentication → Emails → SMTP Settings. This is separate from the application's notification mailer. Resend requires a verified sender domain/address. Previous Gmail SMTP authentication for application notifications failed; revoke any old shared App Password and use a newly generated credential only if that provider is selected.
+- Supabase Auth custom SMTP is enabled, but delivery to customer inboxes is not confirmed. This is separate from the application's notification mailer. A successful signup or resend response only means Supabase accepted the request; check the provider's delivery logs and the recipient inbox. For Gmail SMTP, use a Google App Password rather than the regular account password. A transactional provider such as Resend requires a verified sender domain/address.
 - Apply `supabase/migrations/003_razorpay_payments.sql` before deploying the Razorpay checkout code. Configure the `payment.captured` webhook at `/api/webhooks/razorpay` and test with Razorpay test credentials before enabling live payments. A successful test payment must advance only its matching order to `artwork_pending`.
 - Apply `supabase/migrations/004_subscriptions.sql` before deploying subscription access. Configure a plan under **Admin → Subscription** and enable the subscription lifecycle webhook events listed in `README.md`. Test activation, cancellation, and access revocation with Razorpay test credentials before enabling live subscriptions.
 - Print generation requires a valid order with artwork and an approved latest proof; a pending-payment QA order is not suitable for validating final output.
