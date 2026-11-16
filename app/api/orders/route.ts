@@ -63,6 +63,8 @@ async function createDemoOrder(request: NextRequest) {
           status: 'pending_payment' as const,
           stripe_payment_id: undefined,
           stripe_session_id: undefined,
+          razorpay_order_id: undefined,
+          razorpay_payment_id: undefined,
           created_at: now,
           updated_at: now,
         }
@@ -198,6 +200,41 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    console.error('[orders POST] account role lookup failed:', profileError)
+    return Response.json({ error: 'Could not verify account access' }, { status: 500 })
+  }
+
+  const adminClient = createSupabaseAdminClient()
+  if (profile?.role !== 'admin') {
+    const { data: activeSubscription, error: subscriptionError } = await adminClient
+      .from('customer_subscriptions')
+      .select('id')
+      .eq('customer_id', user.id)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    if (subscriptionError) {
+      console.error('[orders POST] subscription lookup failed:', subscriptionError)
+      return Response.json({ error: 'Could not verify subscription access' }, { status: 500 })
+    }
+    if (!activeSubscription) {
+      return Response.json(
+        {
+          error: 'An active subscription is required to place orders.',
+          code: 'SUBSCRIPTION_REQUIRED',
+        },
+        { status: 403 }
+      )
+    }
+  }
+
   let body: unknown
   try {
     body = await request.json()
@@ -211,7 +248,6 @@ export async function POST(request: NextRequest) {
     'reorder_from_id' in body &&
     typeof body.reorder_from_id === 'string'
   ) {
-    const adminClient = createSupabaseAdminClient()
     const { data: source, error: sourceError } = await adminClient
       .from('orders')
       .select('*')
@@ -364,8 +400,6 @@ export async function POST(request: NextRequest) {
     product.pricing_tiers,
     sizeMultiplier
   )
-
-  const adminClient = createSupabaseAdminClient()
 
   const { data: order, error: insertError } = await adminClient
     .from('orders')

@@ -1,15 +1,19 @@
 import { type NextRequest } from 'next/server'
-import Stripe from 'stripe'
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase/server'
 import { getAppSession } from '@/lib/app-session'
 import { isDemoAuthEnabled } from '@/lib/demo-auth'
 import { updateDemoStore } from '@/lib/demo-store'
+import {
+  isRazorpayConfigured,
+  razorpayRequest,
+  type RazorpayOrder,
+} from '@/lib/razorpay'
 
 // ----------------------------------------------------------------
-// POST /api/orders/[id]/checkout — Create Stripe checkout session
+// POST /api/orders/[id]/checkout — Create or reuse a Razorpay order
 // ----------------------------------------------------------------
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
@@ -51,8 +55,11 @@ export async function POST(
     })
   }
 
-  if (!process.env.STRIPE_SECRET_KEY) {
-    return Response.json({ error: 'Stripe not configured' }, { status: 500 })
+  if (!isRazorpayConfigured()) {
+    return Response.json(
+      { error: 'Razorpay is not configured yet. Please contact support.' },
+      { status: 503 }
+    )
   }
 
   const supabase = await createSupabaseServerClient()
@@ -66,10 +73,11 @@ export async function POST(
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Fetch the order
   const { data: order, error: orderError } = await supabase
     .from('orders')
-    .select('*, product:products(*)')
+    .select(
+      'id,customer_id,status,total_price,razorpay_order_id,product:products(name)'
+    )
     .eq('id', id)
     .single()
 
@@ -77,12 +85,10 @@ export async function POST(
     return Response.json({ error: 'Order not found' }, { status: 404 })
   }
 
-  // Verify ownership
   if (order.customer_id !== user.id) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Order must be in pending_payment state
   if (order.status !== 'pending_payment') {
     return Response.json(
       { error: `Order is not in pending_payment status (current: ${order.status})` },
@@ -90,43 +96,98 @@ export async function POST(
     )
   }
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+  const amount = Math.round(Number(order.total_price) * 100)
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return Response.json({ error: 'Order total is invalid for payment' }, { status: 400 })
+  }
+  const productName = order.product?.[0]?.name || 'Custom Print Order'
 
-  const productName = order.product?.name ?? 'Custom Print Order'
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
-
-  let session: Stripe.Checkout.Session
+  let razorpayOrder: RazorpayOrder
   try {
-    session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [
-        {
-          price_data: {
-            currency: 'inr',
-            unit_amount: Math.round(order.total_price * 100), // paisa
-            product_data: {
-              name: productName,
-              description: `Qty: ${order.quantity}`,
-            },
+    if (order.razorpay_order_id) {
+      const existingOrder = await razorpayRequest<RazorpayOrder>(
+        `/orders/${encodeURIComponent(order.razorpay_order_id)}`,
+        { method: 'GET' }
+      )
+
+      if (existingOrder.status === 'paid') {
+        return Response.json(
+          { error: 'Payment is already processing. Refresh the order shortly.' },
+          { status: 409 }
+        )
+      }
+      if (
+        existingOrder.amount !== amount ||
+        existingOrder.currency !== 'INR' ||
+        !['created', 'attempted'].includes(existingOrder.status)
+      ) {
+        return Response.json(
+          { error: 'The existing payment attempt cannot be reused. Please contact support.' },
+          { status: 409 }
+        )
+      }
+      razorpayOrder = existingOrder
+    } else {
+      razorpayOrder = await razorpayRequest<RazorpayOrder>('/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount,
+          currency: 'INR',
+          receipt: id,
+          notes: {
+            order_id: id,
+            customer_id: user.id,
           },
-          quantity: 1,
-        },
-      ],
-      metadata: { order_id: id },
-      success_url: `${baseUrl}/orders/${id}?success=true`,
-      cancel_url: `${baseUrl}/orders/${id}`,
-    })
+        }),
+      })
+      if (
+        razorpayOrder.amount !== amount ||
+        razorpayOrder.currency !== 'INR' ||
+        !razorpayOrder.id
+      ) {
+        throw new Error('Razorpay created an order with unexpected payment details')
+      }
+    }
   } catch (err) {
-    console.error('[checkout] Stripe session creation failed:', err)
-    return Response.json({ error: 'Failed to create checkout session' }, { status: 500 })
+    console.error('[checkout] Razorpay order creation failed:', err)
+    return Response.json({ error: 'Could not start Razorpay checkout' }, { status: 502 })
   }
 
-  // Persist stripe session ID
   const adminClient = createSupabaseAdminClient()
-  await adminClient
+  const paymentOrderUpdate = adminClient
     .from('orders')
-    .update({ stripe_session_id: session.id })
+    .update({ razorpay_order_id: razorpayOrder.id })
     .eq('id', id)
+    .eq('customer_id', user.id)
+    .eq('status', 'pending_payment')
+  const { data: updatedOrder, error: updateError } = order.razorpay_order_id
+    ? await paymentOrderUpdate
+        .eq('razorpay_order_id', order.razorpay_order_id)
+        .select('id')
+        .maybeSingle()
+    : await paymentOrderUpdate
+        .is('razorpay_order_id', null)
+        .select('id')
+        .maybeSingle()
 
-  return Response.json({ url: session.url })
+  if (updateError) {
+    console.error('[checkout] failed to save Razorpay order id:', updateError)
+    return Response.json({ error: 'Could not save payment details' }, { status: 500 })
+  }
+  if (!updatedOrder) {
+    return Response.json(
+      { error: 'Order changed while payment was starting. Refresh and try again.' },
+      { status: 409 }
+    )
+  }
+
+  return Response.json({
+    keyId: process.env.RAZORPAY_KEY_ID,
+    amount: razorpayOrder.amount,
+    currency: razorpayOrder.currency,
+    razorpayOrderId: razorpayOrder.id,
+    name: 'Digital Heroes',
+    description: productName,
+    prefillEmail: user.email ?? '',
+  })
 }

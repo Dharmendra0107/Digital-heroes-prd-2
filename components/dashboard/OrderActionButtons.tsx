@@ -1,5 +1,6 @@
 'use client'
 
+import Script from 'next/script'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { OrderStatus } from '@/types'
@@ -13,6 +14,7 @@ interface Props {
 export default function OrderActionButtons({ orderId, status, demo = false }: Props) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [isRazorpayReady, setIsRazorpayReady] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
 
@@ -25,22 +27,91 @@ export default function OrderActionButtons({ orderId, status, demo = false }: Pr
       const res = await fetch(`/api/orders/${orderId}/checkout`, {
         method: 'POST',
       })
-      const data = await res.json()
+      const data = (await res.json()) as {
+        error?: string
+        demo?: boolean
+        message?: string
+        keyId?: string
+        amount?: number
+        currency?: string
+        razorpayOrderId?: string
+        name?: string
+        description?: string
+        prefillEmail?: string
+      }
 
       if (!res.ok) {
         throw new Error(data.error || 'Failed to initiate checkout')
       }
 
-      if (data.url) {
-        window.location.href = data.url
-      } else if (data.demo) {
-        setSuccessMsg(data.message)
+      if (data.demo) {
+        setSuccessMsg(data.message || 'Demo checkout completed. No payment was collected.')
         setLoading(false)
         router.refresh()
-      } else {
-        setLoading(false)
-        router.refresh()
+        return
       }
+
+      if (
+        !data.keyId ||
+        !data.amount ||
+        !data.currency ||
+        !data.razorpayOrderId ||
+        !window.Razorpay
+      ) {
+        throw new Error('Secure checkout is unavailable. Please refresh and try again.')
+      }
+
+      const checkout = new window.Razorpay({
+        key: data.keyId,
+        amount: data.amount,
+        currency: data.currency,
+        name: data.name || 'Digital Heroes',
+        description: data.description || 'Custom Print Order',
+        order_id: data.razorpayOrderId,
+        prefill: { email: data.prefillEmail || '' },
+        theme: { color: '#f59e0b' },
+        handler: async (paymentResponse) => {
+          if (
+            !paymentResponse.razorpay_order_id ||
+            !paymentResponse.razorpay_payment_id ||
+            !paymentResponse.razorpay_signature
+          ) {
+            setErrorMsg('Razorpay returned an incomplete payment response.')
+            setLoading(false)
+            return
+          }
+
+          try {
+            const verifyResponse = await fetch(`/api/orders/${orderId}/verify-payment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(paymentResponse),
+            })
+            const verification = (await verifyResponse.json()) as { error?: string }
+            if (!verifyResponse.ok) {
+              throw new Error(verification.error || 'Could not verify payment')
+            }
+            setSuccessMsg('Payment successful. Your order is ready for artwork.')
+            setLoading(false)
+            router.refresh()
+          } catch (err: unknown) {
+            setErrorMsg(
+              err instanceof Error
+                ? `${err.message}. If your account was charged, refresh this order shortly.`
+                : 'Could not confirm payment. If your account was charged, refresh this order shortly.'
+            )
+            setLoading(false)
+          }
+        },
+        modal: {
+          ondismiss: () => setLoading(false),
+        },
+      })
+      checkout.on('payment.failed', (response) => {
+        setErrorMsg(response.error?.description || 'Payment failed. Please try again.')
+        setLoading(false)
+      })
+      checkout.open()
     } catch (err: unknown) {
       setErrorMsg(
         err instanceof Error
@@ -97,7 +168,7 @@ export default function OrderActionButtons({ orderId, status, demo = false }: Pr
           <button
             type="button"
             onClick={handleCheckout}
-            disabled={loading}
+            disabled={loading || (!demo && !isRazorpayReady)}
             className="px-6 py-3 bg-neutral-900 hover:bg-black text-white font-semibold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-2"
           >
             <span>💳</span>
@@ -106,7 +177,9 @@ export default function OrderActionButtons({ orderId, status, demo = false }: Pr
                 ? 'Processing...'
                 : demo
                   ? 'Place order'
-                  : 'Pay Online via Stripe'}
+                  : isRazorpayReady
+                    ? 'Pay online with Razorpay'
+                    : 'Loading secure checkout...'}
             </span>
           </button>
         )}
@@ -132,6 +205,17 @@ export default function OrderActionButtons({ orderId, status, demo = false }: Pr
         <p className="text-[11px] text-amber-800">
           Demo checkout: no payment will be taken.
         </p>
+      )}
+      {!demo && status === 'pending_payment' && (
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="afterInteractive"
+          onReady={() => setIsRazorpayReady(true)}
+          onError={() => {
+            setIsRazorpayReady(false)
+            setErrorMsg('Could not load Razorpay checkout. Check your connection and refresh.')
+          }}
+        />
       )}
     </div>
   )

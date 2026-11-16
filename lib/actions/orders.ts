@@ -42,6 +42,21 @@ export async function reorderFromPreviousAction(orderId: string) {
     throw new Error('Unauthorized')
   }
 
+  const { data: activeSubscription, error: subscriptionError } = await supabase
+    .from('customer_subscriptions')
+    .select('id')
+    .eq('customer_id', user.id)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (subscriptionError) {
+    console.error('[reorderFromPreviousAction] subscription lookup failed:', subscriptionError)
+    throw new Error('Could not verify subscription access')
+  }
+  if (!activeSubscription) {
+    throw new Error('An active subscription is required to place orders.')
+  }
+
   const { data: previousOrder } = await supabase
     .from('orders')
     .select('*')

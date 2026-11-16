@@ -8,18 +8,36 @@ import {
 } from '@/lib/demo-auth'
 
 // Routes that require authentication
-const CUSTOMER_ROUTES = ['/dashboard', '/orders', '/designer', '/proofs']
+const CUSTOMER_ROUTES = ['/dashboard', '/orders', '/designer', '/proofs', '/products']
 const ADMIN_ROUTES = ['/admin']
 const AUTH_ROUTES = ['/login', '/signup', '/admin/login']
 
-export async function middleware(request: NextRequest) {
+function redirectToLogin(request: NextRequest) {
+  const loginUrl = new URL('/login', request.url)
+  loginUrl.searchParams.set(
+    'next',
+    `${request.nextUrl.pathname}${request.nextUrl.search}`
+  )
+  return NextResponse.redirect(loginUrl)
+}
+
+function redirectToSubscribe(request: NextRequest) {
+  const subscribeUrl = new URL('/subscribe', request.url)
+  subscribeUrl.searchParams.set(
+    'next',
+    `${request.nextUrl.pathname}${request.nextUrl.search}`
+  )
+  return NextResponse.redirect(subscribeUrl)
+}
+
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   let response = NextResponse.next({ request })
 
   if (isDemoAuthEnabled()) {
     const secret = process.env.DEMO_AUTH_SECRET
     if (!secret) {
-      console.error('[middleware] DEMO_AUTH_SECRET is missing')
+      console.error('[proxy] DEMO_AUTH_SECRET is missing')
       return NextResponse.json({ error: 'Local demo authentication is not configured' }, { status: 500 })
     }
 
@@ -42,7 +60,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (isCustomerRoute && !demoSession) {
-      return NextResponse.redirect(new URL(`/login?next=${pathname}`, request.url))
+      return redirectToLogin(request)
     }
 
     return response
@@ -100,7 +118,39 @@ export async function middleware(request: NextRequest) {
 
   // Protect customer routes
   if (CUSTOMER_ROUTES.some(r => pathname.startsWith(r)) && !user) {
-    return NextResponse.redirect(new URL(`/login?next=${pathname}`, request.url))
+    return redirectToLogin(request)
+  }
+
+  if (
+    user &&
+    (pathname === '/products' || pathname.startsWith('/products/'))
+  ) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('[proxy] failed to load product-route profile:', profileError)
+      return NextResponse.json({ error: 'Could not verify account access' }, { status: 500 })
+    }
+
+    if (profile?.role !== 'admin') {
+      const { data: subscription, error: subscriptionError } = await supabase
+        .from('customer_subscriptions')
+        .select('id')
+        .eq('customer_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle()
+
+      if (subscriptionError) {
+        console.error('[proxy] failed to verify subscription access:', subscriptionError)
+        return NextResponse.json({ error: 'Could not verify subscription access' }, { status: 500 })
+      }
+
+      if (!subscription) return redirectToSubscribe(request)
+    }
   }
 
   // Protect admin routes — check role from profile

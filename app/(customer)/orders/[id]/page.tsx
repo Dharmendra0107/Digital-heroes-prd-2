@@ -279,9 +279,9 @@ export default async function OrderDetailPage({ params }: Props) {
               <span className="text-sm text-neutral-900">Order total:</span>
               <span className="text-xl font-mono text-neutral-900">{formatINR(order.total_price)}</span>
             </div>
-            {order.stripe_payment_id && (
+            {(order.razorpay_payment_id || order.stripe_payment_id) && (
               <div className="pt-2 text-[10px] text-neutral-400 font-mono">
-                Payment Ref: {order.stripe_payment_id}
+                Payment Ref: {order.razorpay_payment_id || order.stripe_payment_id}
               </div>
             )}
           </div>

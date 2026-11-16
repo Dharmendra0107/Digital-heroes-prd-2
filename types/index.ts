@@ -66,6 +66,42 @@ export type OrderStatus =
   | 'completed'
   | 'cancelled'
 
+export type SubscriptionBillingPeriod = 'monthly' | 'yearly'
+
+export type CustomerSubscriptionStatus =
+  | 'created'
+  | 'authenticated'
+  | 'active'
+  | 'pending'
+  | 'halted'
+  | 'paused'
+  | 'cancelled'
+  | 'completed'
+  | 'expired'
+
+export interface SubscriptionPlanSettings {
+  amount_paise: number
+  billing_period: SubscriptionBillingPeriod
+  razorpay_plan_id: string
+  updated_at: string
+}
+
+export interface CustomerSubscription {
+  id: string
+  customer_id: string
+  razorpay_subscription_id: string
+  razorpay_plan_id: string
+  amount_paise: number
+  billing_period: SubscriptionBillingPeriod
+  status: CustomerSubscriptionStatus
+  current_start: string | null
+  current_end: string | null
+  charge_at: string | null
+  cancel_at_cycle_end: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface Order {
   id: string
   customer_id: string
@@ -80,6 +116,8 @@ export interface Order {
   config_snapshot: Record<string, unknown>
   stripe_payment_id?: string
   stripe_session_id?: string
+  razorpay_order_id?: string
+  razorpay_payment_id?: string
   created_at: string
   updated_at: string
 }

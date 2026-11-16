@@ -1,9 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+
+function getSafeNextPath(value: string | null) {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
+    return '/dashboard'
+  }
+  return value
+}
 
 function getAuthErrorMessage(error: unknown, action: 'signup' | 'resend') {
   const message =
@@ -23,8 +30,10 @@ function getAuthErrorMessage(error: unknown, action: 'signup' | 'resend') {
     : message
 }
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const next = getSafeNextPath(searchParams.get('next'))
   const supabase = createSupabaseBrowserClient()
 
   const [fullName, setFullName] = useState('')
@@ -68,7 +77,7 @@ export default function SignupPage() {
 
     try {
       const emailRedirectTo = new URL('/auth/callback', window.location.origin)
-      emailRedirectTo.searchParams.set('next', '/dashboard')
+      emailRedirectTo.searchParams.set('next', next)
 
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -89,7 +98,7 @@ export default function SignupPage() {
 
       if (data.session) {
         // Immediate session granted
-        router.push('/dashboard')
+        router.push(next)
         router.refresh()
       } else if (!data.user?.id || data.user.identities?.length === 0) {
         setSuccessMsg(
@@ -114,7 +123,7 @@ export default function SignupPage() {
 
     try {
       const emailRedirectTo = new URL('/auth/callback', window.location.origin)
-      emailRedirectTo.searchParams.set('next', '/dashboard')
+      emailRedirectTo.searchParams.set('next', next)
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email,
@@ -161,7 +170,10 @@ export default function SignupPage() {
             >
               {resending ? 'Requesting…' : 'Resend confirmation email'}
             </button>
-            <Link href="/login" className="underline text-emerald-900">
+            <Link
+              href={`/login?next=${encodeURIComponent(next)}`}
+              className="underline text-emerald-900"
+            >
               Go to Login &rarr;
             </Link>
           </div>
@@ -255,10 +267,21 @@ export default function SignupPage() {
 
       <div className="mt-5 text-center text-xs text-neutral-500">
         Already registered?{' '}
-        <Link href="/login" className="text-amber-600 font-semibold hover:underline">
+        <Link
+          href={`/login?next=${encodeURIComponent(next)}`}
+          className="text-amber-600 font-semibold hover:underline"
+        >
           Sign In
         </Link>
       </div>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-neutral-500">Loading...</div>}>
+      <SignupForm />
+    </Suspense>
   )
 }

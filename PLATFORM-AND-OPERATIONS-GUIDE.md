@@ -13,10 +13,11 @@ This guide describes the deployed application, the services it uses, the main or
 | Admin products | https://dh-prd-2.vercel.app/admin/products |
 | Admin users and roles | https://dh-prd-2.vercel.app/admin/users |
 | Admin reports | https://dh-prd-2.vercel.app/admin/reports |
+| Admin subscription plan | https://dh-prd-2.vercel.app/admin/subscription |
 | Vercel project | https://vercel.com/dharmendra17/dh-prd-2 |
 | Vercel environment variables | https://vercel.com/dharmendra17/dh-prd-2/settings/environment-variables |
 | Supabase dashboard | https://supabase.com/dashboard |
-| Stripe dashboard | https://dashboard.stripe.com/ |
+| Razorpay dashboard | https://dashboard.razorpay.com/ |
 | Resend dashboard | https://resend.com/ |
 
 The Vercel project is connected to `dharmendradev-0107/dh-prd-2`. The local Git `origin` is `Dharmendra0107/Digital-heroes-prd-2`; changes intended for production must also reach the Vercel-connected repository's `main` branch.
@@ -28,7 +29,7 @@ The Vercel project is connected to `dharmendradev-0107/dh-prd-2`. The local Git 
 | Next.js, React, TypeScript, Tailwind CSS | Application pages, interactive UI, API routes, and styling. |
 | Vercel | Hosts the live Next.js application and stores Production environment variables. Pushing to the connected `main` branch triggers deployment. |
 | Supabase | PostgreSQL database, user authentication, profiles and roles, and application data such as products, orders, designs, proofs, and print-file records. |
-| Stripe | Creates hosted checkout sessions and processes payment events through `/api/webhooks/stripe`. Payment processing requires valid Stripe secrets and a configured webhook. |
+| Razorpay | Processes recurring subscriptions for service access and separate per-order payments. The server verifies checkout signatures and webhook events before enabling subscription access or advancing an order. |
 | Resend | One supported transactional email provider. It requires an API key and an authorized sender address/domain. |
 | Gmail SMTP / Nodemailer | Alternative transactional email provider. If any SMTP setting is supplied, SMTP is selected before Resend; all required SMTP settings must be valid. |
 | PDFKit and Sharp | Generate server-side print PDF and PNG output. Production output is guarded by order status and proof approval. |
@@ -37,9 +38,9 @@ The Vercel project is connected to `dharmendradev-0107/dh-prd-2`. The local Git 
 
 ## How the application works
 
-1. A customer browses the storefront and configures a product. Product definitions, pricing tiers, and configuration are stored in Supabase.
-2. The customer signs in through Supabase Auth and places an order. New signup confirmation emails redirect to `/auth/callback` on the same origin where signup began; the callback exchanges Supabase's one-time code for a session before opening the customer dashboard. The order and its selected product configuration are saved in the database with an initial status such as `pending_payment`.
-3. If Stripe is configured, the customer can start a Stripe Checkout session. A verified `checkout.session.completed` webhook updates the order to `artwork_pending`. Do not treat a successful order submission as proof that a payment was collected.
+1. A customer creates an account or signs in. New signup confirmation emails redirect to `/auth/callback` on the same origin where signup began; the callback exchanges Supabase's one-time code for a session.
+2. Before browsing product services, a customer must subscribe through Razorpay. The admin configures the current monthly or yearly plan at **Admin → Subscription**. Verified Razorpay subscription events update the customer subscription record; only an active subscription unlocks services.
+3. An active subscriber can configure products and place unlimited orders; each print order is priced and paid for separately. The order API independently verifies active subscription status. For a `pending_payment` order, Razorpay Checkout collects the per-order amount and the app verifies the signature and captured payment; the `payment.captured` webhook is the server-to-server recovery path. Only a verified captured payment advances an order to `artwork_pending`.
 4. The customer creates or uploads artwork for the order. The admin reviews the order and updates its production status from the admin order detail page.
 5. Proof records can be sent to the customer. The customer can approve a pending proof or request revisions. Approval marks the proof approved and moves the order to `proof_approved`.
 6. Print output is available only when the order is in an allowed status and its latest proof is approved. The admin can then generate production output. Race-number orders also support a variable-data CSV merge.
@@ -74,13 +75,13 @@ The application recognizes these environment variable names:
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Supabase client key; database access must still be protected by policies. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Privileged server-side Supabase operations. Keep secret; never expose to browser code. |
-| `STRIPE_SECRET_KEY` | Server-side Stripe Checkout and payment API access. |
-| `STRIPE_WEBHOOK_SECRET` | Verifies Stripe webhook signatures. |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Listed in `.env.example`; current Checkout creation uses the server-side Stripe key and does not reference this variable. |
+| `RAZORPAY_KEY_ID` | Razorpay key ID used to create orders and initialize Checkout. |
+| `RAZORPAY_KEY_SECRET` | Server-only Razorpay API and checkout-signature secret. Never expose it to browser code. |
+| `RAZORPAY_WEBHOOK_SECRET` | Verifies Razorpay webhook signatures; set the same value in the Razorpay Dashboard webhook configuration. |
 | `RESEND_API_KEY` | Resend API access for email delivery. |
 | `EMAIL_FROM` | Sender address authorized by the configured email provider. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Optional SMTP configuration. SMTP takes priority over Resend when any of these values is set; configure all four together. |
-| `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SITE_URL` | Application base URLs used by email links and Stripe checkout redirects in their respective code paths. Set them to the live URL in production. |
+| `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SITE_URL` | Application base URLs used by email links. Set them to the live URL in production. |
 | `DEMO_AUTH`, `DEMO_AUTH_SECRET` | Local-only demo authentication configuration. Demo auth is disabled in production. |
 
 Never paste secret values into this guide. Obtain or rotate them through the respective provider dashboards and update them only in the correct environment.
@@ -89,7 +90,8 @@ Never paste secret values into this guide. Obtain or rotate them through the res
 
 - The deployment and admin pages have been exercised in production, including order status updates and the cancelled status filter.
 - Supabase Auth custom SMTP is currently disabled; confirmation-email delivery to customer inboxes is not confirmed. Configure and test a verified sender in Supabase Authentication → Emails → SMTP Settings. This is separate from the application's notification mailer. Resend requires a verified sender domain/address. Previous Gmail SMTP authentication for application notifications failed; revoke any old shared App Password and use a newly generated credential only if that provider is selected.
-- Payment configuration and a successful live payment have not been confirmed by this guide. Test payment and webhook behavior in Stripe test mode before enabling real transactions.
+- Apply `supabase/migrations/003_razorpay_payments.sql` before deploying the Razorpay checkout code. Configure the `payment.captured` webhook at `/api/webhooks/razorpay` and test with Razorpay test credentials before enabling live payments. A successful test payment must advance only its matching order to `artwork_pending`.
+- Apply `supabase/migrations/004_subscriptions.sql` before deploying subscription access. Configure a plan under **Admin → Subscription** and enable the subscription lifecycle webhook events listed in `README.md`. Test activation, cancellation, and access revocation with Razorpay test credentials before enabling live subscriptions.
 - Print generation requires a valid order with artwork and an approved latest proof; a pending-payment QA order is not suitable for validating final output.
 - Admin credentials are individual Supabase Auth accounts. Use `/admin/login`; assign the `admin` role through an authorized administrative process. Do not store an admin password in repository documentation. A temporary password does not expire automatically after one day; rotate any temporary password manually after testing.
 

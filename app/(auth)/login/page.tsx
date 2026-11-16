@@ -140,7 +140,10 @@ function LoginForm() {
 
       <div className="mt-5 text-center text-xs text-neutral-500">
         Don&apos;t have an account?{' '}
-        <Link href="/signup" className="text-amber-600 font-semibold hover:underline">
+        <Link
+          href={`/signup?next=${encodeURIComponent(next)}`}
+          className="text-amber-600 font-semibold hover:underline"
+        >
           Create one now
         </Link>
       </div>

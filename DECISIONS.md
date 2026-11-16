@@ -39,7 +39,8 @@ Decisions made where the PRD was silent or ambiguous.
 | Supabase Auth with email/password | Simple, secure, no extra infrastructure |
 | Role stored in profiles table | Flexible; can add team/corporate ordering later |
 | Admin role set via SQL | Deliberate barrier — admins are not self-serve |
-| Stripe test mode by default | Production keys require live Stripe account |
+| Razorpay test mode by default | Production keys require a verified Razorpay account |
+| Subscription required for product services; orders still charged separately | Active subscribers may place unlimited separately paid print orders; admins configure a monthly or yearly recurring price |
 | Gmail SMTP takes priority; Resend remains a fallback | Local Gmail SMTP uses an App Password; missing provider configuration skips delivery in demo setups |
 | Local demo workflow data stored in `.demo-data.json` | Development-only persistence for demo orders, artwork, proofs, and statuses; never used in production |
 | Demo checkout advances workflow without charging | Keeps the local order-to-proof demo testable without representing a payment transaction |
@@ -56,4 +57,5 @@ Decisions made where the PRD was silent or ambiguous.
 | Profile settings | Customers can update their name and company, but not their email address. In local demo mode, changes apply to the active signed-in session; signing in again restores the configured demo account details. |
 | Email notifications | Order creation, proof submission, and the first completion transition use configured Gmail SMTP or Resend. Missing provider credentials skip delivery explicitly; incomplete SMTP configuration and provider failures are returned as notification status. |
 | Admin editing | Supabase-backed admins can update product name, description, base price, availability, and user name, company, and role. Active product edits are reflected in the public catalog and price calculator. Local demo products and accounts are read-only. The final administrator cannot be demoted. |
-| Stripe live payments | Configured for test mode. Live payments require a verified Stripe account with live keys. |
+| Razorpay live payments | Use test credentials until checkout, signature verification, payment capture, and webhook handling are tested. Live payments require a verified Razorpay account with live keys. |
+| Subscription testing | Apply migration `004_subscriptions.sql`, configure Razorpay subscription lifecycle webhooks, and verify activation/cancellation using test keys before enabling production subscriptions. Local demo authentication does not simulate subscriptions. |
