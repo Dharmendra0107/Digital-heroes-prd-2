@@ -12,6 +12,15 @@ function getSafeNextPath(value: string | null) {
   return value
 }
 
+function getEmailRedirectTo(next: string) {
+  const redirectTo = new URL('/auth/callback', window.location.origin)
+  if (redirectTo.hostname === '127.0.0.1') {
+    redirectTo.hostname = 'localhost'
+  }
+  redirectTo.searchParams.set('next', next)
+  return redirectTo.toString()
+}
+
 function getAuthErrorMessage(error: unknown, action: 'signup' | 'resend') {
   const message =
     error instanceof Error ? error.message : 'Please verify your details and try again.'
@@ -76,14 +85,11 @@ function SignupForm() {
     setLoading(true)
 
     try {
-      const emailRedirectTo = new URL('/auth/callback', window.location.origin)
-      emailRedirectTo.searchParams.set('next', next)
-
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: emailRedirectTo.toString(),
+          emailRedirectTo: getEmailRedirectTo(next),
           data: {
             full_name: fullName,
             company: company || undefined,
@@ -122,12 +128,10 @@ function SignupForm() {
     setResending(true)
 
     try {
-      const emailRedirectTo = new URL('/auth/callback', window.location.origin)
-      emailRedirectTo.searchParams.set('next', next)
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email,
-        options: { emailRedirectTo: emailRedirectTo.toString() },
+        options: { emailRedirectTo: getEmailRedirectTo(next) },
       })
 
       if (error) {
