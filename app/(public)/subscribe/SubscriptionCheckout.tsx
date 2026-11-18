@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Script from 'next/script'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { DISPLAY_SUBSCRIPTION_PLAN } from '@/lib/subscription-plan-display'
 import type { CustomerSubscription, SubscriptionPlanSettings } from '@/types'
 
 interface CheckoutCreationResult {
@@ -247,10 +248,20 @@ export default function SubscriptionCheckout({
           </button>
         </div>
       ) : (
-        <p className="text-sm leading-6 text-neutral-300">
-          The administrator has not configured a subscription plan yet. Please check back later or
-          contact support.
-        </p>
+        <div>
+          <p className="text-3xl font-bold">
+            ₹{(DISPLAY_SUBSCRIPTION_PLAN.amountPaise / 100).toFixed(2)}
+            <span className="ml-2 text-sm font-medium text-neutral-400">/ year</span>
+          </p>
+          <p className="mt-3 text-sm leading-6 text-neutral-300">
+            Unlimited order placement while your membership is active. Each print order is charged
+            separately.
+          </p>
+          <p role="status" className="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
+            Display-only price. Checkout is temporarily unavailable while billing is being
+            configured, and viewing this offer does not activate membership access.
+          </p>
+        </div>
       )}
     </section>
   )
